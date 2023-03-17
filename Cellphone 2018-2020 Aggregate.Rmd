@@ -1,0 +1,77 @@
+---
+title: "2018-2022 CellPhone Agg."
+author: "Jacob Matthews"
+date: "2/28/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE}
+library(dplyr)
+library(sf)
+library(sp)
+
+#Read in 2018-2020 Cellphone Files
+
+Parks2018<-as.data.frame(read_csv('/Users/jake/Desktop/Capstone Project Files/PittParks2018_aggregate.csv'))
+Parks2019<-as.data.frame(read_csv('/Users/jake/Desktop/Capstone Project Files/PittParks2019_aggregate.csv'))
+Parks2020<-as.data.frame(read_csv('/Users/jake/Desktop/Capstone Project Files/PittParks2020_aggregate.csv'))
+```
+
+```{r}
+#Rename mismatched columns between files 
+colnames(Parks2018)[1]='Month'
+colnames(Parks2019)[2]='X'
+colnames(Parks2020)[2]='X'
+
+#Bind 3 files to 1, Select relevant features
+FullParks<-rbind(Parks2018,Parks2019,Parks2020)
+FullParks<-FullParks%>%filter(grepl('Highland|August|Emerald View|Riverview|Mellon|Westinghouse', location_name))%>%select('location_name','placekey','visitor_home_cbgs','raw_visitor_counts','Month')
+```
+
+```{r}
+for (i in 1:nrow(FullParks)){
+    if (i==1){ #first row create new df
+    unlistedParks<-unlist(strsplit(FullParks$visitor_home_cbgs[i],","))
+    #get rid of special characters
+    unlistedParks<-str_replace_all(unlistedParks, '[""]', '')
+    unlistedParks<-str_replace_all(unlistedParks, '[{}]', '')
+    unlistedParks<-as.data.frame(unlistedParks)
+    #correct column names
+    colnames(unlistedParks)[1]='GEOID'
+    unlistedParks$location_name=FullParks$location_name[i]
+  }
+  else{ #all other rows rbind data to df
+    temp<-unlist(strsplit(FullParks$visitor_home_cbgs[i],","))
+    #get rid of special characters
+    temp<-str_replace_all(temp, '[""]', '')
+    temp<-str_replace_all(temp, '[{}]', '')
+    temp<-as.data.frame(temp)
+    colnames(temp)[1]='GEOID'
+    temp$location_name=FullParks$location_name[i]
+    unlistedParks<-rbind(unlistedParks,temp)
+  }
+}
+#split geoid and home cbg to two columns
+unlistedParks<-separate(unlistedParks,GEOID,into=c('GEOID','home_cbg_count'),sep = ':')
+
+#make home_cbg numeric
+unlistedParks$home_cbg_count<-as.numeric(unlistedParks$home_cbg_count)
+
+#make location name synonymus across parks within parks
+unlistedParks$location_name<-substr(unlistedParks$location_name,1,7)
+#filter outlier cbgs
+unlistedParks<-unlistedParks%>%filter(GEOID!='CA')
+unlistedParks<-unlistedParks%>%filter(GEOID!='420030201005')
+unlistedParks<-unlistedParks%>%filter(GEOID!='420039801001')
+
+#aggregate to unique values
+unlistedParks<-unlistedParks%>%aggregate(home_cbg_count~GEOID+location_name,FUN = sum,na.rm=TRUE)
+
+
+```
+
+

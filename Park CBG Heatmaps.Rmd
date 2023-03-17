@@ -1,0 +1,225 @@
+---
+title: "Park CBG Heatmaps"
+author: "Jacob Matthews"
+date: "3/10/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Libraries
+
+library(tidycensus)
+library(tigris)
+library(sf)
+library(sp)
+library(tidyverse)
+library(viridis)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+```{r}
+#Get Census Key
+
+census_api_key("fb245bf4fdcd8427059f8251e020eb4f077af30a", install = TRUE)
+# First time, reload your environment so you can use the key without restarting R.
+readRenviron("~/.Renviron")
+# Go Get my Census API Key from my environmental variables
+Sys.getenv("CENSUS_API_KEY")
+```
+```{r}
+#census info of interest
+Demo_vars<- c(
+Population = "B02001_001",
+White = "B02001_002",
+Black = "B02009_001"
+)
+# access the census data
+Pitt_CBG<- get_acs(geography = "cbg", 
+              variables = demographic_vars, 
+              state = "PA", 
+              county = "ALLEGHENY",
+              survey = "acs5",
+              year = 2018)
+Pitt_CBG<-as.data.frame(Pitt_CBG)
+#get population by 
+Population <- subset(Pitt_CBG, variable == "Population") %>% select(GEOID, estimate)
+Population <- setNames(Population, c("GEOID","Population"))
+
+for (i in 1:nrow(Population)){
+  if(Population$Population[i]<50){
+    Population$Population[i]=0
+  }  
+}
+
+```
+
+```{r}
+#Park and Pittsburgh Municipality Shapefiles
+
+Parks_sf<-st_read('/Users/jake/Desktop/Capstone Project Files/Pittsburgh_Parks/Pittsburgh_Parks.shp')
+municipalities<-st_read("/Users/jake/Desktop/Capstone Project Files/LandRecords_LANDRECORDS_OWNER_Municipalities.shp")
+#filter only desired parks
+Parks_sf<-Parks_sf%>%filter(grepl('Highland|August|Emerald View|Riverview|Mellon|Westinghouse', updatepknm))
+pitt_municipality_shape<-municipalities%>%filter(NAME=="PITTSBURGH")
+Pittsburgh_crs <- Pittsburgh
+pitt_municipality_shape_crs <- st_transform(pitt_municipality_shape, "NAD83")
+Pittsburgh<- Pittsburgh_crs%>%sf::st_filter(pitt_municipality_shape_crs)
+st_geometry(Pittsburgh)
+ggplot(Pittsburgh)+
+  geom_sf(data= Pittsburgh$geometry, fill=NA)+
+  geom_sf(data = Parks_sf, fill= "green")
+```
+
+```{r}
+#HIGHLAND PARK
+
+#Filter on Park Name
+Highland<-unlistedParks%>%filter(location_name=='Highlan')
+Highland<-Highland%>%group_by(GEOID)%>%summarise(total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+Highland_combined<-geo_join(Pittsburgh,Highland,"GEOID","GEOID",how='left')
+Highland_combined<-geo_join(Highland_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric and divide into Deciles
+Highland_combined$Visitrate<-ifelse(Highland_combined$Population==0,NA,Highland_combined$total/Highland_combined$Population)
+Highland_combined$Decile<-ntile(Highland_combined$Visitrate,10)
+hbreaks<-c(0,.1,.25,0.5,.75,1)
+#Map Deciles
+ggplot(Highland_combined, aes(fill = Decile))+
+  geom_sf(, colour = 'black') +
+  scale_fill_viridis_c(option="C") + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  ggtitle("Highland Park Visit Rate Deciles 2018-2020")
+
+```
+
+```{r}
+#EMERALDVIEW PARK
+
+#Filter on Park Name
+Emerald<-unlistedParks%>%filter(location_name=='Emerald')
+Emerald<-Emerald%>%group_by(GEOID)%>%summarise(total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+Emerald_combined<-geo_join(Pittsburgh,Emerald,"GEOID","GEOID",how='left')
+
+Emerald_combined<-geo_join(Emerald_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric and divide into Deciles
+Emerald_combined$Visitrate<-ifelse(Emerald_combined$Population==0,NA,Emerald_combined$total/Emerald_combined$Population)
+Emerald_combined$Decile<-ntile(Emerald_combined$Visitrate,10)
+
+
+#Map Deciles
+ggplot(Emerald_combined, aes(fill = Decile))+
+  geom_sf(, colour = 'black') +
+  scale_fill_viridis_c(option="C",begin = 0, end = .99) + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  ggtitle("EmeraldView Park Visit Rate Deciles 2018-2020")
+```
+```{r}
+#MELLON PARK
+
+#Filter on Park Name
+Mellon<-unlistedParks%>%filter(location_name=='Mellon ')
+Mellon<-Mellon%>%group_by(GEOID)%>%summarise(total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+Mellon_combined<-geo_join(Pittsburgh,Mellon,"GEOID","GEOID",how='left')
+Mellon_combined<-geo_join(Mellon_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric and divide into Deciles
+Mellon_combined$Visitrate<-ifelse(Mellon_combined$Population==0,NA,Mellon_combined$total/Mellon_combined$Population)
+Mellon_combined$Decile<-ntile(Mellon_combined$Visitrate,10)
+
+
+#Map Deciles
+ggplot(Mellon_combined, aes(fill = Decile))+
+  geom_sf(, colour = 'black') +
+  scale_fill_viridis_c(option="C",begin = 0, end = .99) + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  ggtitle("Mellon Park Visit Rate Deciles 2018-2020")
+
+```
+
+```{r}
+#WESTINGHOUSE PARK
+
+#Filter on Park Name
+Westinghouse<-unlistedParks%>%filter(location_name=='Westing')
+Westinghouse<-Westinghouse%>%group_by(GEOID)%>%summarise(total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+Westinghouse_combined<-geo_join(Pittsburgh,Westinghouse,"GEOID","GEOID",how='left')
+Westinghouse_combined<-geo_join(Westinghouse_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric
+Westinghouse_combined$Visitrate<-ifelse(Westinghouse_combined$Population==0,NA,                                                 Westinghouse_combined$total/Westinghouse_combined$Population)
+
+#divide into deciles
+Westinghouse_combined$Decile<-ntile(Westinghouse_combined$Visitrate,10)
+
+#Map Deciles
+ggplot(Westinghouse_combined, aes(fill = Decile))+
+  geom_sf(, colour = 'black') +
+  scale_fill_viridis_c(option="C",begin = 0, end = .99) + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  ggtitle("Westinghouse Park Visit Rate Deciles 2018-2020")
+```
+```{r}
+#RIVERVIEW PARK
+
+#Filter on Park Name
+River<-unlistedParks%>%filter(location_name=='Rivervi')
+River<-River%>%group_by(GEOID)%>%summarise(num = n(),total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+Riverview_combined<-geo_join(Pittsburgh,River,"GEOID","GEOID",how='left')
+Riverview_combined<-geo_join(Riverview_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric and divide into Deciles
+Riverview_combined$Visitrate<-ifelse(Riverview_combined$Population==0,NA,Riverview_combined$total/Riverview_combined$Population)
+Riverview_combined$Decile<-ntile(Riverview_combined$Visitrate,10)
+
+
+#Map Deciles
+ggplot(Riverview_combined, aes(fill = Decile))+
+  geom_sf(, colour = NA) +
+  scale_fill_viridis_c(option="C",begin = 0, end = .99) + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  ggtitle("Riverview Park Visit Rate Deciles 2018-2020")
+```
+```{r}
+#AUGUST WILSON
+
+#Filter on Park Name
+August<-unlistedParks%>%filter(location_name=='August ')
+August<-August%>%group_by(GEOID)%>%summarise(num = n(),total = sum(home_cbg_count))
+
+#Join with Municipality and Census Info
+August_combined<-geo_join(Pittsburgh,August,"GEOID","GEOID",how='left')
+August_combined<-geo_join(August_combined,Population,"GEOID","GEOID",how='left')
+
+#Determine VisitRate metric
+August_combined$Visitrate<-ifelse(August_combined$Population==0,NA,                                                 August_combined$total/August_combined$Population)
+
+#divide into deciles
+August_combined$Decile<-ntile(August_combined$Visitrate,10)
+
+#Map Deciles
+ggplot(August_combined, aes(fill = Decile))+
+  geom_sf(, colour = NA) +
+  scale_fill_viridis_c(option="C",begin = 0, end = .99) + 
+  geom_sf(data = Parks_sf, fill= "forest green")+
+  geom_point(aes(x=-79.9855230,y=40.4462901),color='forest green',size=1)
+  ggtitle("August-Wilson Park Visit Rate Deciles 2018-2020")
+```
+
+
